@@ -9,7 +9,9 @@ from core_engine import (
     process_post, detect_post_type, generate_caption,
     send_message_to_telegram, download_photo_post, send_photo_to_telegram,
     send_carousel_to_telegram, deep_search_and_send, deep_discovery_ai,
-    smart_discovery_ai, extract_shortcode
+    smart_discovery_ai, extract_shortcode,
+    generate_caption_variants, generate_hashtag_pack,
+    get_best_posting_times, add_watermark, get_content_log
 )
 
 # Initialize DB on app start
@@ -528,3 +530,128 @@ if image_files:
                 image = Image.open(image_path)
                 st.image(image, use_container_width=True)
             except: pass
+
+# =========================================
+# FEATURE: AI CAPTION GENERATOR
+# =========================================
+
+st.markdown("---")
+st.markdown("## ✍️ AI Caption Generator")
+
+cap_col1, cap_col2 = st.columns([2, 1])
+with cap_col1:
+    cap_topic = st.text_input("Caption Topic", placeholder="e.g. airport look, red dress photoshoot")
+with cap_col2:
+    cap_style = st.selectbox("Style", ["Dreamy", "Main Character", "Trending"], key="cap_style")
+
+if st.button("✨ Generate 5 Captions"):
+    if cap_topic.strip():
+        with st.spinner("Generating captions..."):
+            variants = generate_caption_variants(cap_topic, cap_style)
+        for i, cap in enumerate(variants, 1):
+            st.markdown(f"""
+            <div class='card' style='padding:14px;'>
+                <b>#{i}</b> &nbsp; {cap}
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.warning("Enter a topic first.")
+
+# =========================================
+# FEATURE: HASHTAG PACK GENERATOR
+# =========================================
+
+st.markdown("---")
+st.markdown("## #️⃣ Hashtag Pack Generator")
+
+hash_col1, hash_col2 = st.columns([2, 1])
+with hash_col1:
+    hash_topic = st.text_input("Hashtag Topic", placeholder="e.g. Gayatri Bhardwaj fashion")
+with hash_col2:
+    hash_niche = st.selectbox("Niche", ["actress fanpage", "fashion", "aesthetic", "bollywood"])
+
+if st.button("🔥 Generate Hashtag Pack"):
+    if hash_topic.strip():
+        with st.spinner("Building hashtag pack..."):
+            pack = generate_hashtag_pack(hash_topic, hash_niche)
+        h1, h2, h3 = st.columns(3)
+        with h1:
+            st.markdown("**🔴 Mega (10M+)**")
+            st.code(" ".join(pack.get("mega", [])), language=None)
+        with h2:
+            st.markdown("**🟡 Mid (500K-5M)**")
+            st.code(" ".join(pack.get("mid", [])), language=None)
+        with h3:
+            st.markdown("**🟢 Niche (<500K)**")
+            st.code(" ".join(pack.get("niche", [])), language=None)
+
+        all_tags = " ".join(pack.get("mega", []) + pack.get("mid", []) + pack.get("niche", []))
+        st.download_button("📋 Copy All Hashtags", data=all_tags, file_name="hashtags.txt")
+    else:
+        st.warning("Enter a topic first.")
+
+# =========================================
+# FEATURE: WATERMARK TOOL
+# =========================================
+
+st.markdown("---")
+st.markdown("## 🖊️ Watermark Tool")
+
+wm_col1, wm_col2 = st.columns([2, 1])
+with wm_col1:
+    wm_text = st.text_input("Watermark Text", value="@gayatribhardwaj__")
+with wm_col2:
+    wm_file = st.file_uploader("Upload Image", type=["jpg", "jpeg", "png"], key="wm_upload")
+
+if st.button("💧 Apply Watermark") and wm_file:
+    import tempfile
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+        tmp.write(wm_file.read())
+        tmp_path = tmp.name
+    try:
+        out_path = add_watermark(tmp_path, wm_text)
+        wm_img = Image.open(out_path)
+        st.image(wm_img, caption="Watermarked Preview", use_container_width=True)
+        with open(out_path, "rb") as f:
+            st.download_button("⬇️ Download Watermarked Image", data=f, file_name="watermarked.jpg")
+    except Exception as e:
+        st.error(f"Watermark failed: {e}")
+
+# =========================================
+# FEATURE: BEST POSTING TIMES
+# =========================================
+
+st.markdown("---")
+st.markdown("## 🕐 Best Posting Times")
+
+times = get_best_posting_times()
+time_df = pd.DataFrame(times)
+st.dataframe(time_df, use_container_width=True, hide_index=True)
+st.download_button(
+    "📅 Download Schedule CSV",
+    data=time_df.to_csv(index=False),
+    file_name="posting_schedule.csv",
+    mime="text/csv"
+)
+
+# =========================================
+# FEATURE: CONTENT CALENDAR / LOG
+# =========================================
+
+st.markdown("---")
+st.markdown("## 📅 Content Log")
+
+log_rows = get_content_log()
+if not log_rows:
+    st.info("No sent posts yet. Send some content first.")
+else:
+    log_df = pd.DataFrame(log_rows, columns=[
+        "Handle", "Shortcode", "URL", "Type", "Status", "Viral Score", "Caption", "Sent At"
+    ])
+    st.dataframe(log_df[["Handle", "Type", "Status", "Viral Score", "Caption", "Sent At"]], use_container_width=True, hide_index=True)
+    st.download_button(
+        "⬇️ Export Log CSV",
+        data=log_df.to_csv(index=False),
+        file_name="content_log.csv",
+        mime="text/csv"
+    )

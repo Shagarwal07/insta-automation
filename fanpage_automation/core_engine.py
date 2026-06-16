@@ -1125,6 +1125,121 @@ Reason:
 
 
 # -------------------------
+# NEW FEATURE ENGINES
+# -------------------------
+
+def generate_caption_variants(topic, style, count=5):
+    """Generate caption variants for a given topic using Gemini."""
+    prompt = f"""
+You are a creative Instagram fanpage content writer for Gayatri Bhardwaj.
+
+Generate {count} UNIQUE, trendy, aesthetic Instagram captions for this topic: "{topic}"
+Style: {style}
+
+Rules:
+- Each caption must be different in tone and structure
+- Keep each under 150 characters
+- Include 1-2 relevant emojis per caption
+- No hashtags inside captions
+- Avoid cringe or generic lines
+
+Return JSON only:
+{{
+  "captions": ["caption1", "caption2", "caption3", "caption4", "caption5"]
+}}
+"""
+    try:
+        response = gemini_model.generate_content(prompt)
+        result = clean_gemini_json(response.text)
+        return result.get("captions", [])
+    except Exception as e:
+        print(f"Caption variants failed: {e}")
+        return [generate_caption(style, "Photo Posts") for _ in range(count)]
+
+
+def generate_hashtag_pack(topic, niche="actress fanpage"):
+    """Generate a hashtag pack using Gemini."""
+    prompt = f"""
+Generate a high-reach Instagram hashtag pack for:
+Topic: {topic}
+Niche: {niche}
+
+Return 30 hashtags grouped as:
+- 10 mega hashtags (10M+ posts)
+- 10 mid hashtags (500K-5M posts)
+- 10 niche hashtags (under 500K posts)
+
+Return JSON only:
+{{
+  "mega": ["#tag1", ...],
+  "mid": ["#tag1", ...],
+  "niche": ["#tag1", ...]
+}}
+"""
+    try:
+        response = gemini_model.generate_content(prompt)
+        return clean_gemini_json(response.text)
+    except Exception as e:
+        print(f"Hashtag pack failed: {e}")
+        return {"mega": [], "mid": [], "niche": []}
+
+
+def get_best_posting_times():
+    """Returns best posting times for Instagram fanpages."""
+    return [
+        {"day": "Monday",    "time": "7:00 PM", "reason": "Post-work scroll peak"},
+        {"day": "Tuesday",   "time": "8:00 AM", "reason": "Morning commute"},
+        {"day": "Wednesday", "time": "11:00 AM", "reason": "Midweek lunch break"},
+        {"day": "Thursday",  "time": "7:00 PM", "reason": "Pre-weekend energy"},
+        {"day": "Friday",    "time": "12:00 PM", "reason": "TGIF engagement spike"},
+        {"day": "Saturday",  "time": "10:00 AM", "reason": "Weekend morning browse"},
+        {"day": "Sunday",    "time": "6:00 PM",  "reason": "Sunday evening peak"},
+    ]
+
+
+def add_watermark(image_path, watermark_text="@gayatribhardwaj__"):
+    """Adds a subtle text watermark to an image. Returns new file path."""
+    from PIL import ImageDraw, ImageFont
+    img = Image.open(image_path).convert("RGBA")
+    w, h = img.size
+
+    overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    font_size = max(20, w // 30)
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
+    except Exception:
+        font = ImageFont.load_default()
+
+    bbox = draw.textbbox((0, 0), watermark_text, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    x, y = w - tw - 20, h - th - 20
+
+    draw.text((x + 1, y + 1), watermark_text, font=font, fill=(0, 0, 0, 80))
+    draw.text((x, y), watermark_text, font=font, fill=(255, 255, 255, 160))
+
+    combined = Image.alpha_composite(img, overlay).convert("RGB")
+    out_path = image_path.replace(".jpg", "_wm.jpg").replace(".png", "_wm.jpg")
+    combined.save(out_path, "JPEG", quality=92)
+    return out_path
+
+
+def get_content_log():
+    """Returns all sent posts for content calendar view."""
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT handle, shortcode, url, post_type, status, viral_score, gemini_caption, created_at
+        FROM posts
+        WHERE status NOT IN ('PENDING', 'SKIPPED')
+        ORDER BY created_at DESC
+        LIMIT 50
+    """).fetchall()
+    conn.close()
+    return rows
+
+
+# -------------------------
 # PROCESS POST
 # -------------------------
 
