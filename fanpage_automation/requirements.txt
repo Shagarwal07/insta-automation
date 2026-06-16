@@ -7,5 +7,5 @@ requests
 imagehash
 instaloader
 google-generativeai
-opencv-python
+opencv-python-headless
 groq

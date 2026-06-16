@@ -5,11 +5,11 @@ import pandas as pd
 import streamlit as st
 from PIL import Image
 from core_engine import (
-    init_db, migrate_db, clear_old_data, clean_handles, sync_data, get_posts, 
-    process_post, detect_post_type, generate_caption, 
+    init_db, migrate_db, clear_old_data, clean_handles, sync_data, get_posts,
+    process_post, detect_post_type, generate_caption,
     send_message_to_telegram, download_photo_post, send_photo_to_telegram,
     send_carousel_to_telegram, deep_search_and_send, deep_discovery_ai,
-    smart_discovery_ai
+    smart_discovery_ai, extract_shortcode
 )
 
 # Initialize DB on app start
@@ -246,9 +246,10 @@ if st.sidebar.button("🚀 Start Deep Discovery AI"):
             st.sidebar.error("Could not read prompt file.")
     
     with st.spinner("Executing Deep Discovery AI..."):
+        mode_slug = deep_mode.lower().replace(" ", "_")
         result = deep_discovery_ai(
             handles=handles,
-            deep_mode=deep_mode,
+            deep_mode=mode_slug,
             limit=10,
             custom_prompt=custom_p,
             discovery_engine="google_images"

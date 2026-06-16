@@ -80,7 +80,7 @@ Return format:
                     "X-Title": "Gayu_theHelper"
                 },
                 json={
-                    "model": "openrouter/free",
+                    "model": "mistralai/mistral-7b-instruct:free",
                     "messages": [
                         {
                             "role": "system",
@@ -244,11 +244,10 @@ def smart_discovery_ai(handles, deep_mode, limit=5, discovery_engine="google_ima
     for handle in handles:
         queries = build_discovery_queries(handle, deep_mode)
         for query in queries:
-            search = GoogleSearch({"q": query, "api_key": serp_api_key, "engine": discovery_engine, "num": 20})
             search = GoogleSearch({
-                "q": query, 
-                "api_key": serp_api_key, 
-                "engine": discovery_engine, 
+                "q": query,
+                "api_key": serp_api_key,
+                "engine": discovery_engine,
                 "ijn": random.randint(0, 8),
                 "num": 20
             })
@@ -666,8 +665,8 @@ def get_gemini_caption_from_db(post_id):
 
 
 def get_file_hash(file_path):
-    """Generates an MD5 hash of a file to detect duplicates."""
-    hasher = hashlib.md5()
+    """Generates a SHA256 hash of a file to detect duplicates."""
+    hasher = hashlib.sha256()
     with open(file_path, "rb") as f:
         for chunk in iter(lambda: f.read(4096), b""):
             hasher.update(chunk)
@@ -882,10 +881,7 @@ def analyze_metadata_for_discovery(item, custom_prompt=None):
     except:
         return {"solo": False, "face_visible": False, "photoshoot": False, "high_quality": False, "engagement": False}
 
-def build_discovery_queries(handle, deep_mode="normal"):
-    handle = handle.replace("@", "").strip()
 def build_discovery_queries(handle, deep_mode="hidden_gems"):
-
     handle = handle.replace("@", "").strip()
 
     actor = "Gayatri Bhardwaj"
@@ -942,7 +938,7 @@ def build_discovery_queries(handle, deep_mode="hidden_gems"):
             f'"{actor}" photos {random.randint(1,10000)}'
         ]
 
-def deep_discovery_ai(handles, limit=10, custom_prompt=None):
+def deep_discovery_ai(handles, deep_mode="hidden_gems", limit=10, custom_prompt=None, discovery_engine="google_images"):
     """Searches multiple sources, ranks results via AI, and sends top picks."""
     serp_api_key = os.getenv("SERP_API_KEY")
     if not serp_api_key:
@@ -952,7 +948,7 @@ def deep_discovery_ai(handles, limit=10, custom_prompt=None):
     seen = set()
 
     for handle in handles:
-        queries = build_discovery_queries(handle)
+        queries = build_discovery_queries(handle, deep_mode)
         for query in queries:
             search = GoogleSearch({
                 "q": query,
