@@ -694,43 +694,82 @@ def download_photo_post(url):
     shortcode = extract_shortcode(url)
     image_paths = []
 
-    # ── Strategy 1: RapidAPI Instagram Scraper ──
+    # ── Strategy 1: RapidAPI subscribed APIs ──
     rapid_key = os.getenv("RAPIDAPI_KEY")
     if rapid_key:
+        # API 1: Instagram best experience by Lobster
         try:
             resp = requests.get(
-                "https://instagram-scraper-api2.p.rapidapi.com/v1/post_info",
+                "https://instagram-best-experience.p.rapidapi.com/media",
                 headers={
                     "x-rapidapi-key": rapid_key,
-                    "x-rapidapi-host": "instagram-scraper-api2.p.rapidapi.com"
+                    "x-rapidapi-host": "instagram-best-experience.p.rapidapi.com"
                 },
-                params={"code_or_id_or_url": shortcode},
+                params={"url": url},
                 timeout=20
             )
+            print(f"Lobster status: {resp.status_code}, response: {resp.text[:300]}")
             if resp.status_code == 200:
-                data = resp.json().get("data", {})
-                # Single photo
-                items = []
-                if data.get("__typename") == "GraphSidecar":
-                    # Carousel
-                    for edge in data.get("edge_sidecar_to_children", {}).get("edges", []):
-                        node = edge.get("node", {})
-                        img = node.get("display_url") or node.get("thumbnail_src")
-                        if img:
-                            items.append(img)
-                else:
-                    img = data.get("display_url") or data.get("thumbnail_src")
-                    if img:
-                        items.append(img)
-
-                for img_url in items[:6]:
+                data = resp.json()
+                # Flatten all image URLs from any response shape
+                candidates = []
+                def _extract_urls(obj):
+                    if isinstance(obj, str) and obj.startswith("http"):
+                        candidates.append(obj)
+                    elif isinstance(obj, list):
+                        for x in obj: _extract_urls(x)
+                    elif isinstance(obj, dict):
+                        for k, v in obj.items():
+                            if any(x in k.lower() for x in ["url", "image", "display", "thumb"]):
+                                _extract_urls(v)
+                _extract_urls(data)
+                for img_url in candidates[:6]:
+                    if not any(x in img_url for x in [".jpg", ".jpeg", ".png", ".webp"]):
+                        continue
                     try:
                         path = _download_image_url(img_url)
                         image_paths.append(path)
                     except Exception as e:
-                        print(f"RapidAPI img download failed: {e}")
+                        print(f"Lobster img dl failed: {e}")
         except Exception as e:
-            print(f"RapidAPI strategy failed: {e}")
+            print(f"Lobster API failed: {e}")
+
+        # API 2: Instagram Scraper Stable API by RockSolid
+        if not image_paths:
+            try:
+                resp = requests.get(
+                    "https://instagram-scraper-stable-api.p.rapidapi.com/ig/post_info/",
+                    headers={
+                        "x-rapidapi-key": rapid_key,
+                        "x-rapidapi-host": "instagram-scraper-stable-api.p.rapidapi.com"
+                    },
+                    params={"url": url},
+                    timeout=25
+                )
+                print(f"RockSolid status: {resp.status_code}, response: {resp.text[:300]}")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    candidates = []
+                    def _extract_urls2(obj):
+                        if isinstance(obj, str) and obj.startswith("http"):
+                            candidates.append(obj)
+                        elif isinstance(obj, list):
+                            for x in obj: _extract_urls2(x)
+                        elif isinstance(obj, dict):
+                            for k, v in obj.items():
+                                if any(x in k.lower() for x in ["url", "image", "display", "thumb"]):
+                                    _extract_urls2(v)
+                    _extract_urls2(data)
+                    for img_url in candidates[:6]:
+                        if not any(x in img_url for x in [".jpg", ".jpeg", ".png", ".webp"]):
+                            continue
+                        try:
+                            path = _download_image_url(img_url)
+                            image_paths.append(path)
+                        except Exception as e:
+                            print(f"RockSolid img dl failed: {e}")
+            except Exception as e:
+                print(f"RockSolid API failed: {e}")
 
     # ── Strategy 2: oEmbed thumbnail ──
     if not image_paths:
@@ -752,9 +791,9 @@ def download_photo_post(url):
 
     if not image_paths:
         raise ValueError(
-            f"Instagram blocked download for {url}\n"
-            "Fix: Add RAPIDAPI_KEY to Streamlit secrets (free at rapidapi.com → "
-            "search 'Instagram Scraper API2' → subscribe free plan)"
+            f"Could not download images from {url}\n"
+            "Check Streamlit logs for API debug output. "
+            "Make sure RAPIDAPI_KEY is set in Streamlit Secrets."
         )
 
     return image_paths
