@@ -10,7 +10,6 @@ import sqlite3
 import requests
 from serpapi import GoogleSearch
 from dotenv import load_dotenv
-import instaloader
 import google.generativeai as genai
 from groq import Groq
 from PIL import Image, ImageStat
@@ -26,13 +25,12 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 # Initialize Instaloader once for reuse
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 gemini_model = genai.GenerativeModel("gemini-2.5-flash")
-L = instaloader.Instaloader(
-    dirname_pattern="downloads/photos/{target}",
-    save_metadata=False,
-    download_comments=False,
-    download_video_thumbnails=False,
-    compress_json=False
-)
+
+DOWNLOAD_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+    "Referer": "https://www.google.com/"
+}
 
 # -------------------------
 # AI FALLBACK ORCHESTRATOR
@@ -670,38 +668,106 @@ def remove_duplicate_images(image_paths):
     return unique_images
 
 
+def _download_image_url(img_url, folder="downloads/photos"):
+    """Downloads a single image URL to disk, returns local path."""
+    os.makedirs(folder, exist_ok=True)
+    resp = requests.get(img_url, headers=DOWNLOAD_HEADERS, timeout=30)
+    if resp.status_code != 200:
+        raise ValueError(f"HTTP {resp.status_code} for {img_url}")
+    img = Image.open(BytesIO(resp.content)).convert("RGB")
+    if img.width < 200 or img.height < 200:
+        raise ValueError("Image too small, skipping")
+    out = os.path.join(folder, f"{uuid.uuid4().hex[:10]}.jpg")
+    img.save(out, "JPEG", quality=92)
+    return out
+
+
 def download_photo_post(url):
+    """
+    Downloads photos for an Instagram post URL.
+    Strategy:
+      1. Try SerpAPI Google Images search for the shortcode to get CDN image URLs
+      2. Try direct OEmbed endpoint (works for public posts, no auth)
+      3. Fallback: send link to Telegram as text if images can't be fetched
+    """
     os.makedirs("downloads/photos", exist_ok=True)
     shortcode = extract_shortcode(url)
+    image_paths = []
 
-    # Track existing files to identify new downloads
-    before_files = set(glob.glob(f"downloads/photos/{shortcode}/*"))
+    # ── Strategy 1: SerpAPI Google Images ──
+    serp_key = os.getenv("SERP_API_KEY")
+    if serp_key:
+        try:
+            search = GoogleSearch({
+                "q": f'site:instagram.com "{shortcode}"',
+                "engine": "google_images",
+                "api_key": serp_key,
+                "num": 10
+            })
+            results = search.get_dict().get("images_results", [])
+            for item in results[:8]:
+                img_url = item.get("original") or item.get("thumbnail")
+                if not img_url:
+                    continue
+                # Skip Instagram CDN (blocked) and low-res thumbnails
+                if any(x in img_url for x in ["lookaside", "fbcdn", "cdninstagram"]):
+                    continue
+                try:
+                    path = _download_image_url(img_url)
+                    image_paths.append(path)
+                    if len(image_paths) >= 4:
+                        break
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"SerpAPI image search failed: {e}")
 
-    try:
-        post = instaloader.Post.from_shortcode(L.context, shortcode)
-        L.download_post(post, target=shortcode)
-    except Exception as e:
-        print(f"Instaloader warning: {e}")
-
-    after_files = set(glob.glob(f"downloads/photos/{shortcode}/*"))
-    new_files = list(after_files - before_files)
-
-    image_paths = [
-        f for f in new_files
-        if f.lower().endswith((".jpg", ".jpeg", ".png"))
-    ]
-
-    # Fallback: if no new files were identified, look at existing ones in folder
+    # ── Strategy 2: Instagram oEmbed (public posts only) ──
     if not image_paths:
-        image_paths = glob.glob(f"downloads/photos/{shortcode}/*.jpg")
-        image_paths += glob.glob(f"downloads/photos/{shortcode}/*.jpeg")
-        image_paths += glob.glob(f"downloads/photos/{shortcode}/*.png")
+        try:
+            oembed = requests.get(
+                f"https://www.instagram.com/oembed/?url={url}",
+                headers=DOWNLOAD_HEADERS,
+                timeout=15
+            )
+            if oembed.status_code == 200:
+                data = oembed.json()
+                thumb = data.get("thumbnail_url")
+                if thumb:
+                    path = _download_image_url(thumb)
+                    image_paths.append(path)
+        except Exception as e:
+            print(f"oEmbed failed: {e}")
 
-    image_paths = sorted(image_paths)
+    # ── Strategy 3: Try scraping og:image meta tag ──
+    if not image_paths:
+        try:
+            page = requests.get(url, headers={
+                **DOWNLOAD_HEADERS,
+                "User-Agent": "facebookexternalhit/1.1"
+            }, timeout=15)
+            if page.status_code == 200:
+                matches = re.findall(r'property="og:image"\s+content="([^"]+)"', page.text)
+                if not matches:
+                    matches = re.findall(r'content="(https://[^"]+\.jpg[^"]*?)"', page.text)
+                for img_url in matches[:3]:
+                    try:
+                        path = _download_image_url(img_url)
+                        image_paths.append(path)
+                        break
+                    except Exception:
+                        continue
+        except Exception as e:
+            print(f"og:image scrape failed: {e}")
+
     image_paths = remove_duplicate_images(image_paths)
 
     if not image_paths:
-        raise Exception("No photo found. This may be reel/video-only post.")
+        raise ValueError(
+            f"Could not download images from {url}.\n"
+            "Instagram blocks direct downloads. "
+            "The post URL has been noted — use the Telegram link feature instead."
+        )
 
     return image_paths
 

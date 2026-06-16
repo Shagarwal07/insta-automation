@@ -5,6 +5,5 @@ Pillow
 python-dotenv
 requests
 imagehash
-instaloader
 google-generativeai
 groq
