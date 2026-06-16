@@ -27,130 +27,158 @@ st.set_page_config(
 )
 
 # =========================================
-# BABY PINK UI THEME
+# UPGRADED UI THEME
 # =========================================
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap');
 
 html, body, .stApp, [class*="css"] {
     font-family: 'Poppins', sans-serif;
 }
 
-/* Main background */
 .stApp {
-    background: #fff5f8;
-    color: #3b1f2b !important;
+    background: linear-gradient(135deg, #fff0f6 0%, #fce4f0 40%, #f8d7ea 100%) !important;
+    color: #2d1320 !important;
 }
 
 /* Sidebar */
 section[data-testid="stSidebar"] {
-    background: #ffd9e7 !important;
+    background: linear-gradient(180deg, #ffe0ee 0%, #ffc8df 100%) !important;
     border-right: 2px solid #f7a8c4;
+    box-shadow: 4px 0 20px rgba(255,100,160,0.12);
 }
+section[data-testid="stSidebar"] * { color: #2d1320 !important; }
 
-section[data-testid="stSidebar"] * {
-    color: #3b1f2b !important;
-}
+/* Top header */
+header { background: transparent !important; }
+[data-testid="stHeader"] { background: transparent !important; }
 
-/* Main text */
-h1, h2, h3, h4, p, label, span, div {
-    color: #3b1f2b !important;
-}
-
-/* Hero */
-.hero {
-    background: #fffafd;
-    border: 1px solid #ffc2d6;
-    border-radius: 28px;
-    padding: 40px;
-    text-align: center;
-    box-shadow: 0 10px 35px rgba(255, 143, 171, 0.18);
-    margin-bottom: 35px;
-}
-
-.mainTitle {
-    color: #d63384 !important;
-    font-size: 58px;
-    font-weight: 700;
-}
-
-.subTitle {
-    color: #9d4b6c !important;
-    font-size: 18px;
-}
+/* All text */
+h1,h2,h3,h4,p,label,span { color: #2d1320 !important; }
 
 /* Inputs */
 input, textarea {
-    background: #ffffff !important;
-    color: #3b1f2b !important;
-    border: 1.5px solid #f7a8c4 !important;
-    border-radius: 14px !important;
-}
-
-input::placeholder,
-textarea::placeholder {
-    color: #9d7b87 !important;
+    background: rgba(255,255,255,0.9) !important;
+    color: #2d1320 !important;
+    border: 1.5px solid #f0a0c0 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 2px 8px rgba(255,100,160,0.08) !important;
 }
 
 /* Selectbox */
 div[data-baseweb="select"] > div {
-    background: #ffffff !important;
-    color: #3b1f2b !important;
-    border: 1.5px solid #f7a8c4 !important;
-    border-radius: 14px !important;
+    background: rgba(255,255,255,0.9) !important;
+    color: #2d1320 !important;
+    border: 1.5px solid #f0a0c0 !important;
+    border-radius: 12px !important;
 }
+div[data-baseweb="select"] span { color: #2d1320 !important; }
 
-div[data-baseweb="select"] span {
-    color: #3b1f2b !important;
+/* File uploader - fix dark box */
+[data-testid="stFileUploader"] {
+    background: rgba(255,255,255,0.85) !important;
+    border: 2px dashed #f7a8c4 !important;
+    border-radius: 16px !important;
+    padding: 8px !important;
+}
+[data-testid="stFileUploader"] * { color: #2d1320 !important; }
+[data-testid="stFileUploaderDropzone"] {
+    background: rgba(255,240,248,0.9) !important;
+    border-radius: 14px !important;
 }
 
 /* Buttons */
 .stButton > button {
-    background: linear-gradient(90deg, #ff7eb3, #ff9fba) !important;
+    background: linear-gradient(135deg, #ff6fab, #ff4d94) !important;
     color: white !important;
     border: none !important;
-    border-radius: 14px !important;
+    border-radius: 12px !important;
     font-weight: 600 !important;
-    padding: 0.7rem 1.2rem !important;
+    font-size: 14px !important;
+    padding: 0.6rem 1.4rem !important;
+    box-shadow: 0 4px 15px rgba(255,77,148,0.35) !important;
+    transition: all 0.2s ease !important;
+    letter-spacing: 0.3px !important;
 }
-
 .stButton > button:hover {
-    background: linear-gradient(90deg, #f85f9d, #ff89aa) !important;
-    box-shadow: 0 8px 20px rgba(255, 105, 180, 0.25);
+    background: linear-gradient(135deg, #ff4d94, #e8006e) !important;
+    box-shadow: 0 6px 20px rgba(255,77,148,0.5) !important;
+    transform: translateY(-1px) !important;
 }
 
 /* Cards */
 .card {
-    background: white;
+    background: rgba(255,255,255,0.85);
     border: 1px solid #ffc2d6;
-    border-radius: 22px;
-    padding: 24px;
-    margin-bottom: 24px;
-    box-shadow: 0 8px 24px rgba(255, 143, 171, 0.14);
+    border-radius: 20px;
+    padding: 22px;
+    margin-bottom: 20px;
+    box-shadow: 0 6px 24px rgba(255,100,160,0.12);
+    backdrop-filter: blur(8px);
+}
+
+/* Section dividers */
+.section-header {
+    background: linear-gradient(90deg, #ff6fab, #ff4d94);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 24px;
+    font-weight: 700;
+    margin: 8px 0 16px 0;
 }
 
 /* Metrics */
 [data-testid="metric-container"] {
-    background: #ffffff;
-    border: 1px solid #ffc2d6;
-    border-radius: 18px;
-    padding: 14px;
+    background: rgba(255,255,255,0.85) !important;
+    border: 1px solid #ffc2d6 !important;
+    border-radius: 16px !important;
+    padding: 14px !important;
+    box-shadow: 0 4px 14px rgba(255,100,160,0.1) !important;
 }
 
-/* Remove dark top header */
-header {
-    background: #fff5f8 !important;
+/* Dataframe */
+[data-testid="stDataFrame"] {
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    border: 1px solid #ffc2d6 !important;
 }
+
+/* Progress bar */
+.stProgress > div > div { background: linear-gradient(90deg,#ff6fab,#ff4d94) !important; }
+
+/* Expander */
+.streamlit-expanderHeader {
+    background: rgba(255,255,255,0.7) !important;
+    border-radius: 12px !important;
+    color: #2d1320 !important;
+}
+
+/* Slider */
+[data-testid="stSlider"] > div > div > div > div {
+    background: linear-gradient(90deg,#ff6fab,#ff4d94) !important;
+}
+
+/* Success/info/warning */
+.stSuccess { border-radius: 12px !important; }
+.stInfo { border-radius: 12px !important; }
+.stWarning { border-radius: 12px !important; }
+.stError { border-radius: 12px !important; }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown("""
-<div class="hero">
-    <div style="font-size:52px;">🌸</div>
-    <div class="mainTitle">Gayu_theHelper</div>
-    <div class="subTitle">Your Dreamy Content Companion ✨</div>
+<div style="background:linear-gradient(135deg,rgba(255,255,255,0.9),rgba(255,220,235,0.8));border:1px solid #ffc2d6;border-radius:28px;padding:44px 40px;text-align:center;box-shadow:0 12px 40px rgba(255,77,148,0.18);margin-bottom:32px;backdrop-filter:blur(10px);">
+    <div style="font-size:56px;margin-bottom:8px;">🌸</div>
+    <div style="color:#d63384;font-size:52px;font-weight:800;letter-spacing:-1px;">Gayu_theHelper</div>
+    <div style="color:#9d4b6c;font-size:17px;margin-top:6px;">Your Dreamy Content Companion ✨</div>
+    <div style="margin-top:16px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap;">
+        <span style="background:#ff6fab22;color:#d63384;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:600;">🤖 AI Powered</span>
+        <span style="background:#ff6fab22;color:#d63384;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:600;">📸 Photo Tools</span>
+        <span style="background:#ff6fab22;color:#d63384;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:600;">💬 Caption Gen</span>
+        <span style="background:#ff6fab22;color:#d63384;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:600;">👗 Style Edit</span>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -677,22 +705,23 @@ with col_l:
 with col_r:
     collage_title = st.text_input("Title on Collage (optional)", value="@gayatribhardwaj__", key="collage_title")
 
-if st.button("✨ Create Collage") and collage_files:
-    import tempfile
-    tmp_paths = []
-    for f in collage_files:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
-            t.write(f.read())
-            tmp_paths.append(t.name)
-    try:
-        out = make_collage(tmp_paths, layout=collage_layout, title_text=collage_title)
-        st.image(Image.open(out), caption="Collage Preview", use_container_width=True)
-        with open(out, "rb") as f:
-            st.download_button("⬇️ Download Collage", data=f, file_name="collage.jpg")
-    except Exception as e:
-        st.error(f"Collage error: {e}")
-elif st.button("✨ Create Collage"):
-    st.warning("Upload at least 2 photos.")
+if st.button("✨ Create Collage", key="create_collage_btn"):
+    if collage_files:
+        import tempfile
+        tmp_paths = []
+        for f in collage_files:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
+                t.write(f.read())
+                tmp_paths.append(t.name)
+        try:
+            out = make_collage(tmp_paths, layout=collage_layout, title_text=collage_title)
+            st.image(Image.open(out), caption="Collage Preview", use_container_width=True)
+            with open(out, "rb") as f:
+                st.download_button("⬇️ Download Collage", data=f, file_name="collage.jpg", key="dl_collage")
+        except Exception as e:
+            st.error(f"Collage error: {e}")
+    else:
+        st.warning("Upload at least 2 photos.")
 
 # =========================================
 # FEATURE: CINEMATIC STYLE FILTER
