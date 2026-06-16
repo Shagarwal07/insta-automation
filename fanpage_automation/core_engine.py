@@ -685,44 +685,54 @@ def _download_image_url(img_url, folder="downloads/photos"):
 def download_photo_post(url):
     """
     Downloads photos for an Instagram post URL.
-    Strategy:
-      1. Try SerpAPI Google Images search for the shortcode to get CDN image URLs
-      2. Try direct OEmbed endpoint (works for public posts, no auth)
-      3. Fallback: send link to Telegram as text if images can't be fetched
+    Strategy chain:
+      1. RapidAPI Instagram Scraper (most reliable, free tier 100 req/month)
+      2. Instagram oEmbed thumbnail
+      3. If all fail - raise with helpful message to send link instead
     """
     os.makedirs("downloads/photos", exist_ok=True)
     shortcode = extract_shortcode(url)
     image_paths = []
 
-    # ── Strategy 1: SerpAPI Google Images ──
-    serp_key = os.getenv("SERP_API_KEY")
-    if serp_key:
+    # ── Strategy 1: RapidAPI Instagram Scraper ──
+    rapid_key = os.getenv("RAPIDAPI_KEY")
+    if rapid_key:
         try:
-            search = GoogleSearch({
-                "q": f'site:instagram.com "{shortcode}"',
-                "engine": "google_images",
-                "api_key": serp_key,
-                "num": 10
-            })
-            results = search.get_dict().get("images_results", [])
-            for item in results[:8]:
-                img_url = item.get("original") or item.get("thumbnail")
-                if not img_url:
-                    continue
-                # Skip Instagram CDN (blocked) and low-res thumbnails
-                if any(x in img_url for x in ["lookaside", "fbcdn", "cdninstagram"]):
-                    continue
-                try:
-                    path = _download_image_url(img_url)
-                    image_paths.append(path)
-                    if len(image_paths) >= 4:
-                        break
-                except Exception:
-                    continue
-        except Exception as e:
-            print(f"SerpAPI image search failed: {e}")
+            resp = requests.get(
+                "https://instagram-scraper-api2.p.rapidapi.com/v1/post_info",
+                headers={
+                    "x-rapidapi-key": rapid_key,
+                    "x-rapidapi-host": "instagram-scraper-api2.p.rapidapi.com"
+                },
+                params={"code_or_id_or_url": shortcode},
+                timeout=20
+            )
+            if resp.status_code == 200:
+                data = resp.json().get("data", {})
+                # Single photo
+                items = []
+                if data.get("__typename") == "GraphSidecar":
+                    # Carousel
+                    for edge in data.get("edge_sidecar_to_children", {}).get("edges", []):
+                        node = edge.get("node", {})
+                        img = node.get("display_url") or node.get("thumbnail_src")
+                        if img:
+                            items.append(img)
+                else:
+                    img = data.get("display_url") or data.get("thumbnail_src")
+                    if img:
+                        items.append(img)
 
-    # ── Strategy 2: Instagram oEmbed (public posts only) ──
+                for img_url in items[:6]:
+                    try:
+                        path = _download_image_url(img_url)
+                        image_paths.append(path)
+                    except Exception as e:
+                        print(f"RapidAPI img download failed: {e}")
+        except Exception as e:
+            print(f"RapidAPI strategy failed: {e}")
+
+    # ── Strategy 2: oEmbed thumbnail ──
     if not image_paths:
         try:
             oembed = requests.get(
@@ -731,42 +741,20 @@ def download_photo_post(url):
                 timeout=15
             )
             if oembed.status_code == 200:
-                data = oembed.json()
-                thumb = data.get("thumbnail_url")
+                thumb = oembed.json().get("thumbnail_url")
                 if thumb:
                     path = _download_image_url(thumb)
                     image_paths.append(path)
         except Exception as e:
             print(f"oEmbed failed: {e}")
 
-    # ── Strategy 3: Try scraping og:image meta tag ──
-    if not image_paths:
-        try:
-            page = requests.get(url, headers={
-                **DOWNLOAD_HEADERS,
-                "User-Agent": "facebookexternalhit/1.1"
-            }, timeout=15)
-            if page.status_code == 200:
-                matches = re.findall(r'property="og:image"\s+content="([^"]+)"', page.text)
-                if not matches:
-                    matches = re.findall(r'content="(https://[^"]+\.jpg[^"]*?)"', page.text)
-                for img_url in matches[:3]:
-                    try:
-                        path = _download_image_url(img_url)
-                        image_paths.append(path)
-                        break
-                    except Exception:
-                        continue
-        except Exception as e:
-            print(f"og:image scrape failed: {e}")
-
     image_paths = remove_duplicate_images(image_paths)
 
     if not image_paths:
         raise ValueError(
-            f"Could not download images from {url}.\n"
-            "Instagram blocks direct downloads. "
-            "The post URL has been noted — use the Telegram link feature instead."
+            f"Instagram blocked download for {url}\n"
+            "Fix: Add RAPIDAPI_KEY to Streamlit secrets (free at rapidapi.com → "
+            "search 'Instagram Scraper API2' → subscribe free plan)"
         )
 
     return image_paths
