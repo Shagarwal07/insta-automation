@@ -19,43 +19,55 @@ import uuid
 # 1. Use absolute path to ensure .env is found regardless of where Streamlit is run
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
+ENV_TXT_PATH = os.path.join(BASE_DIR, ".env.txt")
+
 load_dotenv(ENV_PATH, override=True)
+if os.path.exists(ENV_TXT_PATH):
+    load_dotenv(ENV_TXT_PATH, override=True)
 
 def get_api_key(key_name):
     """Safely fetches API keys from Streamlit secrets or .env"""
+    def is_valid(v):
+        if not v: return False
+        s = str(v).strip().strip("'").strip('"')
+        return bool(s and not s.startswith("your_") and s.lower() != "none")
+        
+    def clean_val(v):
+        return str(v).strip().strip("'").strip('"')
+
     # METHOD 1: Check Streamlit secrets
     try:
         import streamlit as st
         if key_name in st.secrets:
             val = st.secrets.get(key_name)
-            if val:
-                val_str = str(val).strip()
-                if not val_str.startswith("your_") and val_str != "":
-                    return val_str
+            if is_valid(val):
+                return clean_val(val)
     except Exception:
         pass
         
     # METHOD 2: Check standard environment variables (loaded by dotenv)
     val = os.getenv(key_name)
-    if val:
-        val_str = str(val).strip()
-        if not val_str.startswith("your_") and val_str != "":
-            return val_str
+    if is_valid(val):
+        return clean_val(val)
             
     # METHOD 3: Ultimate Fallback (Manual parsing). 
     # This fixes the common Windows Notepad BOM (Byte Order Mark) bug where 
     # the first key in the .env file is misread as '\ufeffSERP_API_KEY'.
-    if os.path.exists(ENV_PATH):
-        try:
-            with open(ENV_PATH, "r", encoding="utf-8-sig") as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith(f"{key_name}="):
-                        fallback_val = line.split("=", 1)[1].strip()
-                        if fallback_val and not fallback_val.startswith("your_"):
-                            return fallback_val
-        except Exception:
-            pass
+    for env_file in [ENV_PATH, ENV_TXT_PATH]:
+        if os.path.exists(env_file):
+            try:
+                with open(env_file, "r", encoding="utf-8-sig") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#"): continue
+                        parts = line.split("=", 1)
+                        if len(parts) == 2:
+                            k = parts[0].strip()
+                            v = parts[1].strip().strip("'").strip('"')
+                            if k == key_name and is_valid(v):
+                                return v
+            except Exception:
+                pass
 
     return None
 
