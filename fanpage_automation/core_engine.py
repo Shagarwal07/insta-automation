@@ -55,19 +55,20 @@ def get_api_key(key_name):
     # the first key in the .env file is misread as '\ufeffSERP_API_KEY'.
     for env_file in [ENV_PATH, ENV_TXT_PATH]:
         if os.path.exists(env_file):
-            try:
-                with open(env_file, "r", encoding="utf-8-sig") as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line or line.startswith("#"): continue
-                        parts = line.split("=", 1)
-                        if len(parts) == 2:
-                            k = parts[0].strip()
-                            v = parts[1].strip().strip("'").strip('"')
-                            if k == key_name and is_valid(v):
-                                return v
-            except Exception:
-                pass
+            for enc in ["utf-8-sig", "utf-16", "cp1252"]:
+                try:
+                    with open(env_file, "r", encoding=enc) as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line or line.startswith("#"): continue
+                            parts = line.split("=", 1)
+                            if len(parts) == 2:
+                                k = parts[0].strip()
+                                v = parts[1].strip().strip("'").strip('"')
+                                if k == key_name and is_valid(v):
+                                    return v
+                except Exception:
+                    continue
 
     return None
 
