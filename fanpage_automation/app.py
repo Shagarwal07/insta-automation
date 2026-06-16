@@ -11,7 +11,8 @@ from core_engine import (
     send_carousel_to_telegram, deep_search_and_send, deep_discovery_ai,
     smart_discovery_ai, extract_shortcode,
     generate_caption_variants, generate_hashtag_pack,
-    get_best_posting_times, add_watermark, get_content_log
+    get_best_posting_times, add_watermark, get_content_log,
+    make_collage, apply_style_filter, ai_style_edit, STYLE_PRESETS
 )
 
 # Initialize DB on app start
@@ -655,3 +656,112 @@ else:
         file_name="content_log.csv",
         mime="text/csv"
     )
+
+# =========================================
+# FEATURE: PHOTO COLLAGE MAKER
+# =========================================
+
+st.markdown("---")
+st.markdown("## 🖼️ Photo Collage Maker")
+
+collage_files = st.file_uploader(
+    "Upload 2–6 photos for collage",
+    type=["jpg", "jpeg", "png"],
+    accept_multiple_files=True,
+    key="collage_upload"
+)
+
+col_l, col_r = st.columns([1, 1])
+with col_l:
+    collage_layout = st.selectbox("Layout", ["2x2", "3x1", "1x3", "2x3", "3x2"], key="collage_layout")
+with col_r:
+    collage_title = st.text_input("Title on Collage (optional)", value="@gayatribhardwaj__", key="collage_title")
+
+if st.button("✨ Create Collage") and collage_files:
+    import tempfile
+    tmp_paths = []
+    for f in collage_files:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
+            t.write(f.read())
+            tmp_paths.append(t.name)
+    try:
+        out = make_collage(tmp_paths, layout=collage_layout, title_text=collage_title)
+        st.image(Image.open(out), caption="Collage Preview", use_container_width=True)
+        with open(out, "rb") as f:
+            st.download_button("⬇️ Download Collage", data=f, file_name="collage.jpg")
+    except Exception as e:
+        st.error(f"Collage error: {e}")
+elif st.button("✨ Create Collage"):
+    st.warning("Upload at least 2 photos.")
+
+# =========================================
+# FEATURE: CINEMATIC STYLE FILTER
+# =========================================
+
+st.markdown("---")
+st.markdown("## 🎬 Cinematic Style Filter")
+
+filter_file = st.file_uploader("Upload photo to style", type=["jpg", "jpeg", "png"], key="filter_upload")
+filter_preset = st.selectbox("Choose Style Preset", list(STYLE_PRESETS.keys()), key="filter_preset")
+
+if st.button("🎨 Apply Style Filter") and filter_file:
+    import tempfile
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
+        t.write(filter_file.read())
+        tmp_path = t.name
+    try:
+        out = apply_style_filter(tmp_path, filter_preset)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.image(Image.open(tmp_path), caption="Original", use_container_width=True)
+        with c2:
+            st.image(Image.open(out), caption=f"{filter_preset} Filter", use_container_width=True)
+        with open(out, "rb") as f:
+            st.download_button("⬇️ Download Styled Photo", data=f, file_name=f"{filter_preset.lower().replace(' ','_')}.jpg")
+    except Exception as e:
+        st.error(f"Filter error: {e}")
+
+# =========================================
+# FEATURE: AI STYLE EDIT (Stability AI)
+# =========================================
+
+st.markdown("---")
+st.markdown("## 🤖 AI Style Edit (img2img)")
+st.caption("Uses Stability AI free tier — get free key at platform.stability.ai | Or uses local filter as fallback")
+
+ai_edit_file = st.file_uploader("Upload photo", type=["jpg", "jpeg", "png"], key="ai_edit_upload")
+
+ai_presets = {
+    "Cinematic Edit": "cinematic film still, dramatic lighting, 8k, highly detailed, aesthetic",
+    "Saree Look": "wearing elegant silk saree, traditional Indian outfit, golden border, soft studio lighting",
+    "Western Dress": "wearing stylish western dress, fashion editorial, clean background, high fashion",
+    "Royal Look": "wearing royal Indian lehenga, jewellery, regal pose, soft bokeh background",
+    "Street Style": "wearing trendy street fashion, urban background, candid natural light",
+    "Custom Prompt": ""
+}
+
+ai_style_choice = st.selectbox("Style Preset", list(ai_presets.keys()), key="ai_style_choice")
+ai_prompt_text = ai_presets[ai_style_choice]
+if ai_style_choice == "Custom Prompt":
+    ai_prompt_text = st.text_area("Write your prompt", placeholder="cinematic lighting, golden hour, beautiful...")
+
+ai_strength = st.slider("Edit Strength (higher = more AI, lower = closer to original)", 0.3, 0.9, 0.6, 0.05)
+
+if st.button("🚀 Generate AI Edit") and ai_edit_file:
+    import tempfile
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
+        t.write(ai_edit_file.read())
+        tmp_path = t.name
+    with st.spinner("Generating AI edit..."):
+        try:
+            out_path, msg = ai_style_edit(tmp_path, ai_prompt_text, strength=ai_strength)
+            st.info(msg)
+            c1, c2 = st.columns(2)
+            with c1:
+                st.image(Image.open(tmp_path), caption="Original", use_container_width=True)
+            with c2:
+                st.image(Image.open(out_path), caption="AI Edited", use_container_width=True)
+            with open(out_path, "rb") as f:
+                st.download_button("⬇️ Download AI Edit", data=f, file_name="ai_edit.jpg")
+        except Exception as e:
+            st.error(f"AI edit failed: {e}")

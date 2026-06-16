@@ -1240,6 +1240,163 @@ def get_content_log():
 
 
 # -------------------------
+# CREATIVE EDIT FEATURES
+# -------------------------
+
+def make_collage(image_paths, layout="2x2", title_text=""):
+    """
+    Creates a photo collage from a list of image paths.
+    layout options: '2x2', '3x1', '1x3', '2x3'
+    Returns output file path.
+    """
+    from PIL import ImageDraw, ImageFont
+
+    layout_map = {
+        "2x2": (2, 2), "3x1": (1, 3), "1x3": (3, 1),
+        "2x3": (2, 3), "3x2": (3, 2)
+    }
+    cols, rows = layout_map.get(layout, (2, 2))
+    needed = cols * rows
+    paths = (image_paths * (needed // len(image_paths) + 1))[:needed]
+
+    cell_w, cell_h = 600, 600
+    padding = 8
+    header_h = 60 if title_text else 0
+    canvas_w = cols * cell_w + (cols + 1) * padding
+    canvas_h = rows * cell_h + (rows + 1) * padding + header_h
+
+    canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 240, 248))
+    draw = ImageDraw.Draw(canvas)
+
+    if title_text:
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
+        except Exception:
+            font = ImageFont.load_default()
+        draw.text((canvas_w // 2 - 100, 14), title_text, fill=(180, 50, 100), font=font)
+
+    for idx, path in enumerate(paths):
+        row_idx = idx // cols
+        col_idx = idx % cols
+        x = padding + col_idx * (cell_w + padding)
+        y = header_h + padding + row_idx * (cell_h + padding)
+        try:
+            img = Image.open(path).convert("RGB")
+            img = img.resize((cell_w, cell_h), Image.LANCZOS)
+            canvas.paste(img, (x, y))
+        except Exception:
+            pass
+
+    os.makedirs("downloads/collages", exist_ok=True)
+    out = f"downloads/collages/collage_{uuid.uuid4().hex[:8]}.jpg"
+    canvas.save(out, "JPEG", quality=92)
+    return out
+
+
+STYLE_PRESETS = {
+    "Cinematic Golden Hour": {
+        "brightness": 1.15, "contrast": 1.2, "saturation": 0.85,
+        "tint": (255, 220, 150, 35)
+    },
+    "Soft Aesthetic": {
+        "brightness": 1.2, "contrast": 0.9, "saturation": 0.7,
+        "tint": (255, 230, 240, 40)
+    },
+    "Moody Dark": {
+        "brightness": 0.82, "contrast": 1.35, "saturation": 0.6,
+        "tint": (20, 10, 40, 50)
+    },
+    "Vintage Film": {
+        "brightness": 1.05, "contrast": 1.1, "saturation": 0.65,
+        "tint": (200, 170, 120, 45)
+    },
+    "Neon Pop": {
+        "brightness": 1.1, "contrast": 1.3, "saturation": 1.6,
+        "tint": (200, 50, 200, 20)
+    },
+    "Clean White": {
+        "brightness": 1.3, "contrast": 0.95, "saturation": 0.8,
+        "tint": (255, 255, 255, 30)
+    },
+}
+
+
+def apply_style_filter(image_path, preset_name):
+    """
+    Applies a cinematic/aesthetic filter preset using Pillow only.
+    Returns output file path.
+    """
+    from PIL import ImageEnhance
+
+    preset = STYLE_PRESETS.get(preset_name, STYLE_PRESETS["Cinematic Golden Hour"])
+    img = Image.open(image_path).convert("RGB")
+
+    img = ImageEnhance.Brightness(img).enhance(preset["brightness"])
+    img = ImageEnhance.Contrast(img).enhance(preset["contrast"])
+    img = ImageEnhance.Color(img).enhance(preset["saturation"])
+
+    tint_layer = Image.new("RGBA", img.size, preset["tint"])
+    img = Image.alpha_composite(img.convert("RGBA"), tint_layer).convert("RGB")
+
+    os.makedirs("downloads/edits", exist_ok=True)
+    slug = preset_name.lower().replace(" ", "_")
+    out = f"downloads/edits/{slug}_{uuid.uuid4().hex[:6]}.jpg"
+    img.save(out, "JPEG", quality=92)
+    return out
+
+
+def ai_style_edit(image_path, prompt, strength=0.65):
+    """
+    Sends image to Stability AI img2img for AI-powered style transformation.
+    Requires STABILITY_API_KEY in .env (free tier: 25 credits/month).
+    Falls back to local filter if key missing.
+    """
+    api_key = os.getenv("STABILITY_API_KEY")
+    if not api_key:
+        return apply_style_filter(image_path, "Cinematic Golden Hour"), "No Stability key — applied local filter instead."
+
+    img = Image.open(image_path).convert("RGB")
+    w, h = img.size
+    # Stability requires dimensions multiple of 64, max 1024
+    new_w = min(1024, (w // 64) * 64)
+    new_h = min(1024, (h // 64) * 64)
+    img = img.resize((new_w, new_h), Image.LANCZOS)
+
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    response = requests.post(
+        "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image",
+        headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+        files={"init_image": ("image.png", buf, "image/png")},
+        data={
+            "text_prompts[0][text]": prompt,
+            "text_prompts[0][weight]": "1",
+            "text_prompts[1][text]": "blurry, bad quality, distorted face, ugly",
+            "text_prompts[1][weight]": "-1",
+            "init_image_strength": str(1 - strength),
+            "cfg_scale": "7",
+            "samples": "1",
+            "steps": "30",
+        },
+        timeout=120
+    )
+
+    if response.status_code != 200:
+        return apply_style_filter(image_path, "Cinematic Golden Hour"), f"API error {response.status_code} — used local filter."
+
+    data = response.json()
+    img_b64 = data["artifacts"][0]["base64"]
+    import base64
+    out_img = Image.open(BytesIO(base64.b64decode(img_b64)))
+    os.makedirs("downloads/ai_edits", exist_ok=True)
+    out_path = f"downloads/ai_edits/ai_edit_{uuid.uuid4().hex[:8]}.jpg"
+    out_img.save(out_path, "JPEG", quality=92)
+    return out_path, "AI edit complete via Stability AI."
+
+
+# -------------------------
 # PROCESS POST
 # -------------------------
 
