@@ -1,0 +1,11 @@
+streamlit
+google-search-results
+pandas
+Pillow
+python-dotenv
+requests
+imagehash
+instaloader
+google-generativeai
+opencv-python
+groq

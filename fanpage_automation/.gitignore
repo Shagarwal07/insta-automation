@@ -1,0 +1,15 @@
+# Environments
+.env
+venv/
+env/
+
+# Database files
+*.db
+*.sqlite3
+
+# Downloaded media
+downloads/
+
+# Python cache
+__pycache__/
+*.pyc
