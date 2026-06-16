@@ -1,6 +1,5 @@
 import hashlib
 import os
-import cv2
 import re
 import glob
 import random
@@ -14,7 +13,7 @@ from dotenv import load_dotenv
 import instaloader
 import google.generativeai as genai
 from groq import Groq
-from PIL import Image
+from PIL import Image, ImageStat
 from io import BytesIO
 import uuid
 
@@ -150,35 +149,19 @@ Return format:
 
 def local_quality_filter(image_path):
     if not os.path.exists(image_path):
-        return True, "Skipped CV: file missing"
-
-    img = cv2.imread(image_path)
-
-    if img is None:
-        return False, "Unreadable image"
-
-    h, w = img.shape[:2]
-
-    # reject very tiny images only
-    if w < 250 or h < 250:
-        return False, "Image too small"
-
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # blur check, softer
-    blur = cv2.Laplacian(gray, cv2.CV_64F).var()
-
-    if blur < 25:
-        return False, f"Too blurry: {blur:.2f}"
-
-    # face detection should add score, not reject
-    face_cascade = cv2.CascadeClassifier(
-        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    )
-
-    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
-
-    return True, f"Passed. Faces detected: {len(faces)}, blur: {blur:.2f}"
+        return True, "Skipped: file missing"
+    try:
+        img = Image.open(image_path).convert("RGB")
+        w, h = img.size
+        if w < 250 or h < 250:
+            return False, "Image too small"
+        # Use pixel variance as blur proxy
+        stat = ImageStat.Stat(img.convert("L"))
+        if stat.var[0] < 200:
+            return False, f"Too blurry: var={stat.var[0]:.1f}"
+        return True, f"Passed. Size: {w}x{h}"
+    except Exception as e:
+        return False, f"Read error: {e}"
 
 def filter_discovery_results(results):
     """
