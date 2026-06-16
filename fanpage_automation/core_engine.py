@@ -18,12 +18,24 @@ import uuid
 
 load_dotenv()
 
+def get_api_key(key_name):
+    """Safely fetches API keys from Streamlit secrets or .env"""
+    try:
+        import streamlit as st
+        if key_name in st.secrets:
+            return st.secrets[key_name]
+    except Exception:
+        pass
+    return os.getenv(key_name)
+
 DB_PATH = "fanpage_data.db"
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+BOT_TOKEN = get_api_key("TELEGRAM_BOT_TOKEN")
+CHAT_ID = get_api_key("TELEGRAM_CHAT_ID")
 
 # Initialize Instaloader once for reuse
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+gemini_key = get_api_key("GEMINI_API_KEY")
+if gemini_key:
+    genai.configure(api_key=gemini_key)
 gemini_model = genai.GenerativeModel("gemini-2.5-flash")
 
 DOWNLOAD_HEADERS = {
@@ -62,7 +74,7 @@ Return format:
 """
 
     # 1. OpenRouter first
-    or_key = os.getenv("OPENROUTER_API_KEY")
+    or_key = get_api_key("OPENROUTER_API_KEY")
 
     print("OPENROUTER KEY FOUND:", bool(or_key))
 
@@ -104,7 +116,7 @@ Return format:
             print(f"OpenRouter Layer Failed: {e}")
 
     # 2. Groq second
-    groq_key = os.getenv("GROQ_API_KEY")
+    groq_key = get_api_key("GROQ_API_KEY")
 
     if groq_key:
         try:
@@ -218,7 +230,10 @@ def smart_discovery_ai(handles, deep_mode, limit=5, discovery_engine="google_ima
     """
     Advanced discovery combining Search, local Computer Vision, and tiered AI Analysis.
     """
-    serp_api_key = os.getenv("SERP_API_KEY")
+    serp_api_key = get_api_key("SERP_API_KEY")
+    if not serp_api_key:
+        raise Exception("SERP_API_KEY is missing! Set it in .env or Streamlit Secrets.")
+
     discovery_results = []
     seen = set()
 
@@ -695,7 +710,7 @@ def download_photo_post(url):
     image_paths = []
 
     # ── Strategy 1: RapidAPI subscribed APIs ──
-    rapid_key = os.getenv("RAPIDAPI_KEY")
+    rapid_key = get_api_key("RAPIDAPI_KEY")
     if rapid_key:
         # API 1: Instagram best experience by Lobster
         try:
@@ -791,9 +806,9 @@ def download_photo_post(url):
 
     if not image_paths:
         raise ValueError(
-            f"Could not download images from {url}\n"
-            "Check Streamlit logs for API debug output. "
-            "Make sure RAPIDAPI_KEY is set in Streamlit Secrets."
+            f"Could not download images from {url}\n\n"
+            "⚠️ IMPORTANT: If RapidAPI failed, you MUST subscribe to the FREE tier of 'Instagram best experience' (by Lobster) "
+            "and 'Instagram Scraper Stable API' (by RockSolid) on RapidAPI.com for your key to work."
         )
 
     return image_paths
@@ -861,9 +876,9 @@ def sync_data(handles, content_mode):
     if not handles:
         return 0
 
-    serp_api_key = os.getenv("SERP_API_KEY")
+    serp_api_key = get_api_key("SERP_API_KEY")
     if not serp_api_key:
-        raise Exception("SERP_API_KEY missing in .env")
+        raise Exception("SERP_API_KEY is missing! Set it in .env or Streamlit Secrets.")
 
     total_saved = 0
     for handle in handles:
@@ -1016,9 +1031,9 @@ def build_discovery_queries(handle, deep_mode="hidden_gems"):
 
 def deep_discovery_ai(handles, deep_mode="hidden_gems", limit=10, custom_prompt=None, discovery_engine="google_images"):
     """Searches multiple sources, ranks results via AI, and sends top picks."""
-    serp_api_key = os.getenv("SERP_API_KEY")
+    serp_api_key = get_api_key("SERP_API_KEY")
     if not serp_api_key:
-        raise Exception("SERP_API_KEY missing in .env")
+        raise Exception("SERP_API_KEY is missing! Set it in .env or Streamlit Secrets.")
 
     discovery_results = []
     seen = set()
@@ -1115,10 +1130,10 @@ def build_deep_search_queries(handle, deep_mode):
     return queries.get(deep_mode, queries["Hidden Gems"])
 
 def deep_search_and_send(handles, deep_mode, limit=10):
-    SERP_API_KEY = os.getenv("SERP_API_KEY")
+    SERP_API_KEY = get_api_key("SERP_API_KEY")
 
     if not SERP_API_KEY:
-        raise Exception("SERP_API_KEY missing")
+        raise Exception("SERP_API_KEY is missing! Set it in .env or Streamlit Secrets.")
 
     found_urls = []
     seen = set()
@@ -1427,7 +1442,7 @@ def ai_style_edit(image_path, prompt, strength=0.65):
     Requires STABILITY_API_KEY in .env (free tier: 25 credits/month).
     Falls back to local filter if key missing.
     """
-    api_key = os.getenv("STABILITY_API_KEY")
+    api_key = get_api_key("STABILITY_API_KEY")
     if not api_key:
         return apply_style_filter(image_path, "Cinematic Golden Hour"), "No Stability key — applied local filter instead."
 
@@ -1500,7 +1515,7 @@ Return a single detailed comma-separated prompt string. No JSON, no bullet point
     )
 
     # --- Step 2: Stability img2img ---
-    api_key = os.getenv("STABILITY_API_KEY")
+    api_key = get_api_key("STABILITY_API_KEY")
     if not api_key:
         out = apply_style_filter(person_path, "Soft Aesthetic")
         return out, f"No Stability key. Costume detected: {costume_description[:120]}..."
