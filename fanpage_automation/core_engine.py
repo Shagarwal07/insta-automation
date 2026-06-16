@@ -16,25 +16,47 @@ from PIL import Image, ImageStat
 from io import BytesIO
 import uuid
 
-# Use override=True so .env keys overwrite the placeholders loaded by st.secrets
-load_dotenv(override=True)
+# 1. Use absolute path to ensure .env is found regardless of where Streamlit is run
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ENV_PATH = os.path.join(BASE_DIR, ".env")
+load_dotenv(ENV_PATH, override=True)
 
 def get_api_key(key_name):
     """Safely fetches API keys from Streamlit secrets or .env"""
+    # METHOD 1: Check Streamlit secrets
     try:
         import streamlit as st
         if key_name in st.secrets:
             val = st.secrets.get(key_name)
-            # Ignore placeholder values from secrets.toml
-            if val and not str(val).startswith("your_"):
-                return val
+            if val:
+                val_str = str(val).strip()
+                if not val_str.startswith("your_") and val_str != "":
+                    return val_str
     except Exception:
         pass
         
+    # METHOD 2: Check standard environment variables (loaded by dotenv)
     val = os.getenv(key_name)
-    # Ignore placeholder values from .env
-    if val and not str(val).startswith("your_"):
-        return val
+    if val:
+        val_str = str(val).strip()
+        if not val_str.startswith("your_") and val_str != "":
+            return val_str
+            
+    # METHOD 3: Ultimate Fallback (Manual parsing). 
+    # This fixes the common Windows Notepad BOM (Byte Order Mark) bug where 
+    # the first key in the .env file is misread as '\ufeffSERP_API_KEY'.
+    if os.path.exists(ENV_PATH):
+        try:
+            with open(ENV_PATH, "r", encoding="utf-8-sig") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith(f"{key_name}="):
+                        fallback_val = line.split("=", 1)[1].strip()
+                        if fallback_val and not fallback_val.startswith("your_"):
+                            return fallback_val
+        except Exception:
+            pass
+
     return None
 
 DB_PATH = "fanpage_data.db"
