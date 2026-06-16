@@ -1662,3 +1662,81 @@ Caption idea:
         send_message_to_telegram(fallback_message)
         update_status(post_id, "DOWNLOAD_FAILED_LINK_SENT", caption)
         return "Download failed. Source link sent to Telegram instead."
+
+
+def check_api_health():
+    """Performs live checks on all major API keys and returns their status."""
+    results = []
+    
+    # 1. Telegram
+    bot_token = get_api_key("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        results.append({"service": "Telegram", "status": "🔴 Missing", "details": "TELEGRAM_BOT_TOKEN not found."})
+    else:
+        try:
+            url = f"https://api.telegram.org/bot{bot_token}/getMe"
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200 and r.json().get("ok"):
+                bot_name = r.json()["result"]["username"]
+                results.append({"service": "Telegram", "status": "✅ Valid", "details": f"Connected to bot @{bot_name}"})
+            else:
+                results.append({"service": "Telegram", "status": "🔴 Invalid", "details": f"API Error: {r.json().get('description')}"})
+        except Exception as e:
+            results.append({"service": "Telegram", "status": "🔴 Error", "details": f"Request failed: {e}"})
+
+    # 2. SerpAPI
+    serp_key = get_api_key("SERP_API_KEY")
+    if not serp_key:
+        results.append({"service": "SerpAPI", "status": "🔴 Missing", "details": "SERP_API_KEY not found."})
+    else:
+        try:
+            search = GoogleSearch({"q": "test", "api_key": serp_key})
+            search.get_dict()
+            results.append({"service": "SerpAPI", "status": "✅ Valid", "details": "Test search successful. Check your account for remaining searches."})
+        except Exception as e:
+            results.append({"service": "SerpAPI", "status": "🔴 Invalid", "details": f"API Error: {e}. Your free trial may have expired."})
+
+    # 3. StabilityAI
+    stability_key = get_api_key("STABILITY_API_KEY")
+    if not stability_key:
+        results.append({"service": "StabilityAI", "status": "🟡 Not Found", "details": "Will use local filters. Add key for AI edits."})
+    else:
+        try:
+            url = "https://api.stability.ai/v1/user/balance"
+            r = requests.get(url, headers={"Authorization": f"Bearer {stability_key}"}, timeout=10)
+            if r.status_code == 200:
+                credits = r.json().get("credits", 0)
+                results.append({"service": "StabilityAI", "status": "✅ Valid", "details": f"Account has {credits:.2f} credits."})
+            else:
+                results.append({"service": "StabilityAI", "status": "🔴 Invalid", "details": f"API Error {r.status_code}: {r.text}. Check your account balance."})
+        except Exception as e:
+            results.append({"service": "StabilityAI", "status": "🔴 Error", "details": f"Request failed: {e}"})
+
+    # 4. Gemini
+    gemini_key = get_api_key("GEMINI_API_KEY")
+    if not gemini_key:
+        results.append({"service": "Gemini", "status": "🔴 Missing", "details": "GEMINI_API_KEY not found. Core AI features will fail."})
+    else:
+        try:
+            genai.list_models()
+            results.append({"service": "Gemini", "status": "✅ Valid", "details": "Successfully connected to Google AI."})
+        except Exception as e:
+            results.append({"service": "Gemini", "status": "🔴 Invalid", "details": f"API Error: {e}"})
+
+    # 5. RapidAPI
+    rapid_key = get_api_key("RAPIDAPI_KEY")
+    if not rapid_key:
+        results.append({"service": "RapidAPI", "status": "🔴 Missing", "details": "RAPIDAPI_KEY not found. Instagram downloads will fail."})
+    else:
+        try:
+            resp = requests.get("https://instagram-best-experience.p.rapidapi.com/media", headers={"x-rapidapi-key": rapid_key, "x-rapidapi-host": "instagram-best-experience.p.rapidapi.com"}, params={"url": "https://www.instagram.com/p/invalidurl"}, timeout=20)
+            if resp.status_code == 404:
+                 results.append({"service": "RapidAPI", "status": "✅ Valid", "details": "Key is valid and subscribed to 'Instagram best experience'."})
+            elif resp.status_code == 403:
+                 results.append({"service": "RapidAPI", "status": "🔴 Invalid", "details": "Key is invalid or you are not subscribed to the API on RapidAPI.com."})
+            else:
+                 results.append({"service": "RapidAPI", "status": "🟡 Warning", "details": f"Unexpected status {resp.status_code}. Check subscription."})
+        except Exception as e:
+            results.append({"service": "RapidAPI", "status": "🔴 Error", "details": f"Request failed: {e}"})
+
+    return results

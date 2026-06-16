@@ -11,7 +11,7 @@ from core_engine import (
     deep_search_and_send, smart_discovery_ai, deep_discovery_ai,
     detect_post_type, generate_caption, extract_shortcode,
     send_message_to_telegram, download_photo_post, send_carousel_to_telegram,
-    generate_caption_variants, generate_hashtag_pack,
+    generate_caption_variants, generate_hashtag_pack, check_api_health,
     get_best_posting_times, add_watermark, get_content_log,
     make_collage, apply_style_filter, ai_style_edit,
     STYLE_PRESETS, costume_transfer
@@ -35,6 +35,7 @@ NAV = {
     "captions":  "✍️ Captions",
     "creative":  "🎨 Creative",
     "analytics": "📊 Analytics",
+    "settings":  "⚙️ Settings",
 }
 
 cols = st.columns(len(NAV))
@@ -52,18 +53,6 @@ page = st.session_state.page
 # 🏠 DASHBOARD
 # ══════════════════════════════════════════
 if page == "dashboard":
-    # --- API Health Check ---
-    from core_engine import get_api_key
-    required_keys = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SERP_API_KEY", "RAPIDAPI_KEY", "GEMINI_API_KEY"]
-    missing_keys = [k for k in required_keys if not get_api_key(k)]
-    if missing_keys:
-        st.error(
-            f"🚨 **API Keys Missing or Invalid:** `{', '.join(missing_keys)}`\n\n"
-            "**Why is this happening?** The app is reading placeholder text (like `'your_api_key_here'`) instead of your real keys. "
-            "Please open your `.env` file and insert your *real* generated API keys. "
-            "Do not use placeholders starting with `your_` when running the app locally."
-        )
-
     handles_input = st.text_input("Instagram Handle", value="@gayatribhardwaj__")
     handles = clean_handles(handles_input)
     posts = get_posts(handles)
@@ -491,3 +480,21 @@ elif page == "analytics":
         c4.metric("Avg Score", round(log_df["Viral Score"].mean(), 1))
         st.dataframe(log_df[["Handle","Type","Status","Viral Score","Caption","Sent At"]], use_container_width=True, hide_index=True)
         st.download_button("⬇️ Export CSV", data=log_df.to_csv(index=False), file_name="content_log.csv", mime="text/csv", key="dl_log")
+
+# ══════════════════════════════════════════
+# ⚙️ SETTINGS
+# ══════════════════════════════════════════
+elif page == "settings":
+    st.markdown("## ⚙️ API Health & Settings")
+    st.info("This page performs live tests to verify your API keys are working correctly. If a service is invalid, check your account on their website for credits or billing issues.")
+
+    if st.button("🩺 Run Health Check", type="primary", use_container_width=True):
+        with st.spinner("Testing API connections..."):
+            health_results = check_api_health()
+        
+        st.markdown("---")
+        for result in health_results:
+            status_icon = result['status'].split(' ')[0]
+            st.markdown(f"#### {result['service']} &nbsp; {status_icon}")
+            st.write(result['details'])
+            st.markdown("<br>", unsafe_allow_html=True)
