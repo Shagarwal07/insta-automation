@@ -1447,7 +1447,7 @@ Return a single detailed comma-separated prompt string. No JSON, no bullet point
     os.makedirs("downloads/costume_edits", exist_ok=True)
     out_path = f"downloads/costume_edits/costume_{uuid.uuid4().hex[:8]}.jpg"
     out_img.save(out_path, "JPEG", quality=92)
-    return out_path, f"✅ Costume applied! Detected: {costume_description[:150]}
+    return out_path, f"Costume applied! Detected: {costume_description[:150]}"
 
 
 # -------------------------
