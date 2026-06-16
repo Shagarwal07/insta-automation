@@ -1373,8 +1373,6 @@ def ai_style_edit(image_path, prompt, strength=0.65):
         data={
             "text_prompts[0][text]": prompt,
             "text_prompts[0][weight]": "1",
-            "text_prompts[1][text]": "blurry, bad quality, distorted face, ugly",
-            "text_prompts[1][weight]": "-1",
             "init_image_strength": str(1 - strength),
             "cfg_scale": "7",
             "samples": "1",
@@ -1394,6 +1392,79 @@ def ai_style_edit(image_path, prompt, strength=0.65):
     out_path = f"downloads/ai_edits/ai_edit_{uuid.uuid4().hex[:8]}.jpg"
     out_img.save(out_path, "JPEG", quality=92)
     return out_path, "AI edit complete via Stability AI."
+
+
+def costume_transfer(person_path, costume_path, strength=0.70):
+    """
+    Step 1: Gemini Vision reads the costume image and generates a detailed fashion prompt.
+    Step 2: Stability AI img2img applies that costume style onto the person photo.
+    Falls back to local filter if Stability key missing.
+    """
+    # --- Step 1: Gemini reads costume ---
+    try:
+        costume_img = Image.open(costume_path).convert("RGB")
+        vision_prompt = """
+You are a fashion analyst. Describe this outfit/costume in extreme detail for an AI image generation prompt.
+Focus on: fabric, color, style, cut, neckline, sleeves, embroidery, accessories, occasion.
+Do NOT mention the person wearing it. Only describe the garment.
+Return a single detailed comma-separated prompt string. No JSON, no bullet points."""
+        response = gemini_model.generate_content([
+            vision_prompt,
+            costume_img
+        ])
+        costume_description = response.text.strip()
+    except Exception as e:
+        costume_description = "elegant traditional Indian outfit, detailed embroidery, rich fabric"
+        print(f"Gemini vision failed: {e}")
+
+    full_prompt = (
+        f"Fashion editorial photo, same person, same face, same pose, "
+        f"now wearing: {costume_description}, "
+        f"professional photography, soft studio lighting, high resolution, 8k"
+    )
+
+    # --- Step 2: Stability img2img ---
+    api_key = os.getenv("STABILITY_API_KEY")
+    if not api_key:
+        out = apply_style_filter(person_path, "Soft Aesthetic")
+        return out, f"No Stability key. Costume detected: {costume_description[:120]}..."
+
+    img = Image.open(person_path).convert("RGB")
+    w, h = img.size
+    new_w = min(1024, (w // 64) * 64)
+    new_h = min(1024, (h // 64) * 64)
+    img = img.resize((new_w, new_h), Image.LANCZOS)
+
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    resp = requests.post(
+        "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image",
+        headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+        files={"init_image": ("image.png", buf, "image/png")},
+        data={
+            "text_prompts[0][text]": full_prompt,
+            "text_prompts[0][weight]": "1",
+            "init_image_strength": str(1 - strength),
+            "cfg_scale": "8",
+            "samples": "1",
+            "steps": "35",
+        },
+        timeout=120
+    )
+
+    if resp.status_code != 200:
+        out = apply_style_filter(person_path, "Soft Aesthetic")
+        return out, f"Stability error {resp.status_code}. Costume: {costume_description[:100]}"
+
+    import base64
+    img_b64 = resp.json()["artifacts"][0]["base64"]
+    out_img = Image.open(BytesIO(base64.b64decode(img_b64)))
+    os.makedirs("downloads/costume_edits", exist_ok=True)
+    out_path = f"downloads/costume_edits/costume_{uuid.uuid4().hex[:8]}.jpg"
+    out_img.save(out_path, "JPEG", quality=92)
+    return out_path, f"✅ Costume applied! Detected: {costume_description[:150]}
 
 
 # -------------------------

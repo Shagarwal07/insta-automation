@@ -12,7 +12,7 @@ from core_engine import (
     smart_discovery_ai, extract_shortcode,
     generate_caption_variants, generate_hashtag_pack,
     get_best_posting_times, add_watermark, get_content_log,
-    make_collage, apply_style_filter, ai_style_edit, STYLE_PRESETS
+    make_collage, apply_style_filter, ai_style_edit, STYLE_PRESETS, costume_transfer
 )
 
 # Initialize DB on app start
@@ -765,3 +765,46 @@ if st.button("🚀 Generate AI Edit") and ai_edit_file:
                 st.download_button("⬇️ Download AI Edit", data=f, file_name="ai_edit.jpg")
         except Exception as e:
             st.error(f"AI edit failed: {e}")
+
+# =========================================
+# FEATURE: COSTUME TRANSFER
+# =========================================
+
+st.markdown("---")
+st.markdown("## 👗 Costume Transfer (Reference-Based)")
+st.caption("💡 Upload a person photo + a reference costume photo. Gemini reads the costume, Stability AI applies it.")
+
+ct_c1, ct_c2 = st.columns(2)
+with ct_c1:
+    ct_person = st.file_uploader("Person Photo", type=["jpg","jpeg","png"], key="ct_person")
+    if ct_person:
+        st.image(ct_person, caption="Person", use_container_width=True)
+with ct_c2:
+    ct_costume = st.file_uploader("Reference Costume Photo", type=["jpg","jpeg","png"], key="ct_costume")
+    if ct_costume:
+        st.image(ct_costume, caption="Reference Costume", use_container_width=True)
+
+ct_strength = st.slider("Transfer Strength", 0.4, 0.9, 0.70, 0.05, key="ct_strength",
+    help="Higher = more costume change, lower = closer to original photo")
+
+if st.button("👗 Apply Costume Transfer"):
+    if ct_person and ct_costume:
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tp:
+            tp.write(ct_person.read())
+            person_tmp = tp.name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tc:
+            tc.write(ct_costume.read())
+            costume_tmp = tc.name
+        with st.spinner("🤖 Gemini reading costume... then applying via Stability AI..."):
+            try:
+                out_path, msg = costume_transfer(person_tmp, costume_tmp, strength=ct_strength)
+                st.success(msg)
+                st.image(Image.open(out_path), caption="Costume Transfer Result", use_container_width=True)
+                with open(out_path, "rb") as f:
+                    st.download_button("⬇️ Download Result", data=f, file_name="costume_transfer.jpg")
+            except Exception as e:
+                st.error(f"Failed: {e}")
+    else:
+        st.warning("Upload both photos first.")
+
