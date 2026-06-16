@@ -24,24 +24,29 @@ migrate_db()
 st.markdown(THEME_CSS, unsafe_allow_html=True)
 st.markdown(HERO_HTML, unsafe_allow_html=True)
 
-# ── TOP NAV ──
-NAV = {
-    "dashboard":  "🏠 Dashboard",
-    "discovery":  "🔍 Discovery",
-    "import":     "📦 Import JSON",
-    "captions":   "✍️ Captions",
-    "creative":   "🎨 Creative",
-    "analytics":  "📊 Analytics",
-}
-page = st.query_params.get("page", "dashboard")
+# ── SESSION STATE NAV ──
+if "page" not in st.session_state:
+    st.session_state.page = "dashboard"
 
-nav_html = '<div class="nav-menu">'
-for key, label in NAV.items():
-    active = "active" if page == key else ""
-    nav_html += f'<a class="nav-btn {active}" href="?page={key}">{label}</a>'
-nav_html += "</div>"
-st.markdown(nav_html, unsafe_allow_html=True)
+NAV = {
+    "dashboard": "🏠 Dashboard",
+    "discovery": "🔍 Discovery",
+    "import":    "📦 Import JSON",
+    "captions":  "✍️ Captions",
+    "creative":  "🎨 Creative",
+    "analytics": "📊 Analytics",
+}
+
+cols = st.columns(len(NAV))
+for i, (key, label) in enumerate(NAV.items()):
+    is_active = st.session_state.page == key
+    btn_style = "primary" if is_active else "secondary"
+    if cols[i].button(label, key=f"nav_{key}", type=btn_style, use_container_width=True):
+        st.session_state.page = key
+        st.rerun()
+
 st.markdown("---")
+page = st.session_state.page
 
 # ══════════════════════════════════════════
 # 🏠 DASHBOARD
@@ -58,10 +63,11 @@ if page == "dashboard":
     c4.metric("⏭ Skipped", len([p for p in posts if p[6] == "SKIPPED"]))
 
     st.markdown("### 💖 Suggested Content")
+    style = st.selectbox("Caption Style", ["Dreamy", "Main Character", "Trending"], key="dash_style")
+
     if not posts:
         st.info("No posts found. Go to 🔍 Discovery to sync data first.")
     else:
-        style = st.selectbox("Caption Style", ["Dreamy", "Main Character", "Trending"], key="dash_style")
         for row in posts[:10]:
             post_id, handle, shortcode, url, post_type, saved_mode, status, viral_score, engagement_rating, category, reason, gemini_caption = row
             score_color = "#e8006e" if viral_score >= 80 else "#f4a261" if viral_score >= 60 else "#8d99ae"
@@ -70,9 +76,7 @@ if page == "dashboard":
                 <b style='color:#e8006e;'>@{handle}</b> &nbsp;·&nbsp; {post_type} &nbsp;·&nbsp;
                 <b style='color:{score_color};'>{viral_score}/100</b> &nbsp;·&nbsp; {engagement_rating}<br>
                 <small style='color:#888;'>{reason}</small>
-                <div style='background:rgba(255,240,248,0.9);padding:12px;border-radius:12px;margin-top:8px;font-style:italic;'>
-                    ✨ {gemini_caption}
-                </div>
+                <div style='background:rgba(255,240,248,0.9);padding:12px;border-radius:12px;margin-top:8px;font-style:italic;'>✨ {gemini_caption}</div>
                 <small style='color:#aaa;'>🔗 {url}</small>
             </div>
             """, unsafe_allow_html=True)
@@ -90,17 +94,44 @@ if page == "dashboard":
 # ══════════════════════════════════════════
 elif page == "discovery":
     st.markdown("## 🔍 Content Discovery")
+
     handles_input = st.text_input("Handles (one per line)", value="@gayatribhardwaj__", key="disc_handles")
     handles = clean_handles(handles_input)
+
     col1, col2 = st.columns(2)
     with col1:
         content_mode = st.selectbox("Content Mode", ["Photo Posts", "Solo Pics Only", "High Engagement Photos", "Reels Only"])
     with col2:
         deep_mode = st.selectbox("Deep Search Mode", ["Hidden Gems", "Photoshoots", "Candid Looks", "Event Looks", "High Reach Looks"])
 
+    st.markdown("---")
+    st.markdown("#### 🔗 Quick URL → Download & Send")
+    direct_url = st.text_input("Paste Instagram Post/Reel URL", placeholder="https://www.instagram.com/p/XXXXX/", key="quick_url")
+    url_style = st.selectbox("Caption Style", ["Dreamy", "Main Character", "Trending"], key="url_style")
+    if st.button("✨ Fetch & Send to Telegram", key="fetch_send"):
+        if direct_url.strip():
+            pt = detect_post_type(direct_url)
+            cap = generate_caption(url_style, content_mode)
+            try:
+                if pt == "reel":
+                    send_message_to_telegram(f"🎬 Reel\n\n{direct_url}\n\n{cap}")
+                    st.success("Reel link sent to Telegram!")
+                elif pt == "photo":
+                    with st.spinner("Downloading photos..."):
+                        paths = download_photo_post(direct_url)
+                    count = send_carousel_to_telegram(paths, cap, direct_url)
+                    st.success(f"{count} photo(s) downloaded & sent to Telegram!")
+                else:
+                    st.warning("Unknown URL type.")
+            except Exception as e:
+                st.error(str(e))
+        else:
+            st.warning("Enter a URL first.")
+
+    st.markdown("---")
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.markdown("#### Sync")
+        st.markdown("#### Sync Data")
         if st.button("🔄 Sync Data", key="sync_btn"):
             with st.spinner("Syncing..."):
                 try:
@@ -109,7 +140,8 @@ elif page == "discovery":
                 except Exception as e:
                     st.error(str(e))
         if st.button("🗑 Clear All Data", key="clear_btn"):
-            clear_old_data(); st.success("Cleared.")
+            clear_old_data()
+            st.success("Cleared.")
 
     with c2:
         st.markdown("#### Deep Search")
@@ -123,10 +155,10 @@ elif page == "discovery":
                     st.error(str(e))
 
     with c3:
-        st.markdown("#### Smart AI")
+        st.markdown("#### Smart AI Discovery")
         smart_limit = st.select_slider("AI Limit", options=[3, 5, 10], value=5)
-        if st.button("🚀 Smart Discovery", key="smart_btn"):
-            with st.spinner("Running AI..."):
+        if st.button("🚀 Smart Discovery AI", key="smart_btn"):
+            with st.spinner("Running AI discovery..."):
                 try:
                     mode_slug = deep_mode.lower().replace(" ", "_")
                     result = smart_discovery_ai(handles=handles, deep_mode=mode_slug, limit=smart_limit)
@@ -136,17 +168,19 @@ elif page == "discovery":
 
     st.markdown("---")
     st.markdown("### 🌌 Deep Discovery AI")
-    disc_handles = st.text_area("Discovery Handles", value="@gayatribhardwaj__", key="disc_handles2")
-    prompt_file = st.file_uploader("Custom prompt .txt (optional)", type=["txt"])
+    disc_handles2 = st.text_area("Discovery Handles", value="@gayatribhardwaj__", key="disc_handles2")
+    prompt_file = st.file_uploader("Custom prompt .txt (optional)", type=["txt"], key="disc_prompt")
     custom_p = None
     if prompt_file:
-        try: custom_p = prompt_file.read().decode("utf-8")
-        except Exception: pass
+        try:
+            custom_p = prompt_file.read().decode("utf-8")
+        except Exception:
+            pass
     if st.button("🚀 Start Deep Discovery AI", key="deep_ai_btn"):
-        with st.spinner("Running..."):
+        with st.spinner("Running Deep Discovery..."):
             try:
                 mode_slug = deep_mode.lower().replace(" ", "_")
-                result = deep_discovery_ai(handles=clean_handles(disc_handles), deep_mode=mode_slug, limit=10, custom_prompt=custom_p)
+                result = deep_discovery_ai(handles=clean_handles(disc_handles2), deep_mode=mode_slug, limit=10, custom_prompt=custom_p)
                 st.success(result)
             except Exception as e:
                 st.error(str(e))
@@ -162,20 +196,26 @@ elif page == "import":
     with col2:
         content_mode = st.selectbox("Content Mode", ["Photo Posts", "Solo Pics Only", "High Engagement Photos", "Reels Only"], key="imp_mode")
 
-    uploaded_json = st.file_uploader("Upload scraped JSON", type=["json"])
+    uploaded_json = st.file_uploader("Upload scraped JSON", type=["json"], key="json_up")
 
     def clean_json_posts(data):
-        if not isinstance(data, list): data = [data]
+        if not isinstance(data, list):
+            data = [data]
         unique_posts, seen = [], set()
         for item in data:
-            if not isinstance(item, dict): continue
+            if not isinstance(item, dict):
+                continue
             url = (item.get("url") or item.get("post_url") or item.get("link")
                    or item.get("instagramUrl") or item.get("shortCodeUrl"))
-            if not url: continue
+            if not url:
+                continue
             url = url.split("?")[0].strip()
             key = extract_shortcode(url) or url
-            if key in seen: continue
-            seen.add(key); item["_clean_url"] = url; unique_posts.append(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            item["_clean_url"] = url
+            unique_posts.append(item)
         return unique_posts
 
     if uploaded_json:
@@ -193,13 +233,15 @@ elif page == "import":
             num_batches = math.ceil(len(cleaned) / 10)
             st.markdown(f"### 🚀 {len(cleaned)} posts · {num_batches} batches")
             for i in range(0, num_batches, 5):
-                cols = st.columns(5)
+                btn_cols = st.columns(5)
                 for j in range(5):
                     idx = i + j
-                    if idx >= num_batches: break
+                    if idx >= num_batches:
+                        break
                     s, e = idx * 10, min((idx + 1) * 10, len(cleaned))
-                    if cols[j].button(f"Batch {idx+1}", key=f"batch_{idx}"):
-                        prog = st.progress(0); ok = fail = 0
+                    if btn_cols[j].button(f"Batch {idx+1}", key=f"batch_{idx}"):
+                        prog = st.progress(0)
+                        ok = fail = 0
                         for n, item in enumerate(cleaned[s:e]):
                             try:
                                 url = item["_clean_url"]
@@ -212,8 +254,9 @@ elif page == "import":
                                     send_message_to_telegram(f"🎬 Reel\n\n{url}\n\n{cap}")
                                 ok += 1
                             except Exception as ex:
-                                fail += 1; st.error(str(ex))
-                            prog.progress((n+1)/(e-s))
+                                fail += 1
+                                st.error(str(ex))
+                            prog.progress((n + 1) / (e - s))
                         st.success(f"Batch {idx+1}: ✅ {ok} sent, ❌ {fail} failed")
         except Exception as e:
             st.error(f"Invalid JSON: {e}")
@@ -222,30 +265,6 @@ elif page == "import":
 # ✍️ CAPTIONS
 # ══════════════════════════════════════════
 elif page == "captions":
-    st.markdown("## 🔗 Quick URL Fetch")
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col1:
-        direct_url = st.text_input("Instagram Post/Reel URL", placeholder="https://www.instagram.com/p/XXXXX/")
-    with col2:
-        style = st.selectbox("Style", ["Dreamy", "Main Character", "Trending"], key="cap_url_style")
-    with col3:
-        content_mode = st.selectbox("Mode", ["Photo Posts", "Solo Pics Only", "High Engagement Photos", "Reels Only"], key="cap_url_mode")
-    if st.button("✨ Fetch & Send", key="fetch_send"):
-        if direct_url.strip():
-            pt = detect_post_type(direct_url)
-            cap = generate_caption(style, content_mode)
-            try:
-                if pt == "reel":
-                    send_message_to_telegram(f"🎬 Reel\n\n{direct_url}\n\n{cap}"); st.success("Sent!")
-                elif pt == "photo":
-                    paths = download_photo_post(direct_url)
-                    st.success(f"{send_carousel_to_telegram(paths, cap, direct_url)} photo(s) sent.")
-                else:
-                    st.warning("Unknown URL type.")
-            except Exception as e:
-                st.error(str(e))
-
-    st.markdown("---")
     st.markdown("## ✍️ AI Caption Generator")
     c1, c2 = st.columns([2, 1])
     with c1:
@@ -281,12 +300,15 @@ elif page == "captions":
                 pack = generate_hashtag_pack(hash_topic, hash_niche)
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.markdown("**🔴 Mega**"); st.code(" ".join(pack.get("mega", [])), language=None)
+                st.markdown("**🔴 Mega (10M+)**")
+                st.code(" ".join(pack.get("mega", [])), language=None)
             with col2:
-                st.markdown("**🟡 Mid**"); st.code(" ".join(pack.get("mid", [])), language=None)
+                st.markdown("**🟡 Mid (500K–5M)**")
+                st.code(" ".join(pack.get("mid", [])), language=None)
             with col3:
-                st.markdown("**🟢 Niche**"); st.code(" ".join(pack.get("niche", [])), language=None)
-            all_tags = " ".join(pack.get("mega",[]) + pack.get("mid",[]) + pack.get("niche",[]))
+                st.markdown("**🟢 Niche (<500K)**")
+                st.code(" ".join(pack.get("niche", [])), language=None)
+            all_tags = " ".join(pack.get("mega", []) + pack.get("mid", []) + pack.get("niche", []))
             st.download_button("📋 Download Hashtags", data=all_tags, file_name="hashtags.txt", key="dl_hash")
         else:
             st.warning("Enter a topic first.")
@@ -300,12 +322,13 @@ elif page == "creative":
 
     with tab1:
         st.markdown("### 🖊️ Watermark Tool")
-        wm_text = st.text_input("Watermark Text", value="@gayatribhardwaj__")
+        wm_text = st.text_input("Watermark Text", value="@gayatribhardwaj__", key="wm_text")
         wm_file = st.file_uploader("Upload Image", type=["jpg","jpeg","png"], key="wm_up")
         if st.button("💧 Apply Watermark", key="wm_btn"):
             if wm_file:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
-                    t.write(wm_file.read()); tmp = t.name
+                    t.write(wm_file.read())
+                    tmp = t.name
                 try:
                     out = add_watermark(tmp, wm_text)
                     c1, c2 = st.columns(2)
@@ -322,14 +345,15 @@ elif page == "creative":
         st.markdown("### 🖼️ Photo Collage Maker")
         collage_files = st.file_uploader("Upload 2–6 photos", type=["jpg","jpeg","png"], accept_multiple_files=True, key="collage_up")
         c1, c2 = st.columns(2)
-        layout = c1.selectbox("Layout", ["2x2","3x1","1x3","2x3","3x2"])
-        title_text = c2.text_input("Title (optional)", value="@gayatribhardwaj__")
+        layout = c1.selectbox("Layout", ["2x2","3x1","1x3","2x3","3x2"], key="collage_layout")
+        title_text = c2.text_input("Title (optional)", value="@gayatribhardwaj__", key="collage_title")
         if st.button("✨ Create Collage", key="collage_btn"):
             if collage_files:
                 tmp_paths = []
                 for f in collage_files:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
-                        t.write(f.read()); tmp_paths.append(t.name)
+                        t.write(f.read())
+                        tmp_paths.append(t.name)
                 try:
                     out = make_collage(tmp_paths, layout=layout, title_text=title_text)
                     st.image(Image.open(out), caption="Collage", use_container_width=True)
@@ -343,11 +367,12 @@ elif page == "creative":
     with tab3:
         st.markdown("### 🎬 Cinematic Style Filter")
         filter_file = st.file_uploader("Upload photo", type=["jpg","jpeg","png"], key="filter_up")
-        preset = st.selectbox("Preset", list(STYLE_PRESETS.keys()))
+        preset = st.selectbox("Preset", list(STYLE_PRESETS.keys()), key="filter_preset")
         if st.button("🎨 Apply Filter", key="filter_btn"):
             if filter_file:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
-                    t.write(filter_file.read()); tmp = t.name
+                    t.write(filter_file.read())
+                    tmp = t.name
                 try:
                     out = apply_style_filter(tmp, preset)
                     c1, c2 = st.columns(2)
@@ -362,7 +387,7 @@ elif page == "creative":
 
     with tab4:
         st.markdown("### 🤖 AI Style Edit")
-        st.caption("Free tier: 25 credits/month · platform.stability.ai · Falls back to local filter if no key")
+        st.caption("Free tier: 25 credits/month · platform.stability.ai — falls back to local filter if no key")
         ai_file = st.file_uploader("Upload photo", type=["jpg","jpeg","png"], key="ai_up")
         ai_presets = {
             "Cinematic Edit": "cinematic film still, dramatic lighting, 8k, highly detailed",
@@ -375,12 +400,13 @@ elif page == "creative":
         choice = st.selectbox("Style", list(ai_presets.keys()), key="ai_preset")
         prompt = ai_presets[choice]
         if choice == "Custom":
-            prompt = st.text_area("Custom prompt", placeholder="cinematic lighting, golden hour...")
+            prompt = st.text_area("Custom prompt", placeholder="cinematic lighting, golden hour...", key="ai_custom_prompt")
         strength = st.slider("Edit Strength", 0.3, 0.9, 0.6, 0.05, key="ai_str")
         if st.button("🚀 Generate AI Edit", key="ai_btn"):
             if ai_file:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
-                    t.write(ai_file.read()); tmp = t.name
+                    t.write(ai_file.read())
+                    tmp = t.name
                 with st.spinner("Generating..."):
                     try:
                         out, msg = ai_style_edit(tmp, prompt, strength=strength)
@@ -401,17 +427,21 @@ elif page == "creative":
         c1, c2 = st.columns(2)
         with c1:
             person_file = st.file_uploader("Person Photo", type=["jpg","jpeg","png"], key="ct_person")
-            if person_file: st.image(person_file, use_container_width=True)
+            if person_file:
+                st.image(person_file, use_container_width=True)
         with c2:
             costume_file = st.file_uploader("Reference Costume", type=["jpg","jpeg","png"], key="ct_costume")
-            if costume_file: st.image(costume_file, use_container_width=True)
+            if costume_file:
+                st.image(costume_file, use_container_width=True)
         ct_str = st.slider("Transfer Strength", 0.4, 0.9, 0.7, 0.05, key="ct_str")
         if st.button("👗 Apply Costume Transfer", key="ct_btn"):
             if person_file and costume_file:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tp:
-                    tp.write(person_file.read()); p_tmp = tp.name
+                    tp.write(person_file.read())
+                    p_tmp = tp.name
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tc:
-                    tc.write(costume_file.read()); c_tmp = tc.name
+                    tc.write(costume_file.read())
+                    c_tmp = tc.name
                 with st.spinner("Processing..."):
                     try:
                         out, msg = costume_transfer(p_tmp, c_tmp, strength=ct_str)
@@ -433,7 +463,7 @@ elif page == "analytics":
     times = get_best_posting_times()
     time_df = pd.DataFrame(times)
     st.dataframe(time_df, use_container_width=True, hide_index=True)
-    st.download_button("📅 Download Schedule", data=time_df.to_csv(index=False), file_name="schedule.csv", mime="text/csv")
+    st.download_button("📅 Download Schedule", data=time_df.to_csv(index=False), file_name="schedule.csv", mime="text/csv", key="dl_schedule")
 
     st.markdown("---")
     st.markdown("### 📅 Content Sent Log")
@@ -448,4 +478,4 @@ elif page == "analytics":
         c3.metric("Reels", len(log_df[log_df["Type"]=="reel"]))
         c4.metric("Avg Score", round(log_df["Viral Score"].mean(), 1))
         st.dataframe(log_df[["Handle","Type","Status","Viral Score","Caption","Sent At"]], use_container_width=True, hide_index=True)
-        st.download_button("⬇️ Export CSV", data=log_df.to_csv(index=False), file_name="content_log.csv", mime="text/csv")
+        st.download_button("⬇️ Export CSV", data=log_df.to_csv(index=False), file_name="content_log.csv", mime="text/csv", key="dl_log")
