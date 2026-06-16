@@ -16,17 +16,26 @@ from PIL import Image, ImageStat
 from io import BytesIO
 import uuid
 
-load_dotenv()
+# Use override=True so .env keys overwrite the placeholders loaded by st.secrets
+load_dotenv(override=True)
 
 def get_api_key(key_name):
     """Safely fetches API keys from Streamlit secrets or .env"""
     try:
         import streamlit as st
         if key_name in st.secrets:
-            return st.secrets[key_name]
+            val = st.secrets.get(key_name)
+            # Ignore placeholder values from secrets.toml
+            if val and not str(val).startswith("your_"):
+                return val
     except Exception:
         pass
-    return os.getenv(key_name)
+        
+    val = os.getenv(key_name)
+    # Ignore placeholder values from .env
+    if val and not str(val).startswith("your_"):
+        return val
+    return None
 
 DB_PATH = "fanpage_data.db"
 BOT_TOKEN = get_api_key("TELEGRAM_BOT_TOKEN")

@@ -52,6 +52,18 @@ page = st.session_state.page
 # 🏠 DASHBOARD
 # ══════════════════════════════════════════
 if page == "dashboard":
+    # --- API Health Check ---
+    from core_engine import get_api_key
+    required_keys = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SERP_API_KEY", "RAPIDAPI_KEY", "GEMINI_API_KEY"]
+    missing_keys = [k for k in required_keys if not get_api_key(k)]
+    if missing_keys:
+        st.error(
+            f"🚨 **API Keys Missing or Invalid:** `{', '.join(missing_keys)}`\n\n"
+            "**Why is this happening?** The app is reading placeholder text (like `'your_api_key_here'`) instead of your real keys. "
+            "Please open your `.env` file and insert your *real* generated API keys. "
+            "Do not use placeholders starting with `your_` when running the app locally."
+        )
+
     handles_input = st.text_input("Instagram Handle", value="@gayatribhardwaj__")
     handles = clean_handles(handles_input)
     posts = get_posts(handles)
